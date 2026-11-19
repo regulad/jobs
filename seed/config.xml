@@ -1,0 +1,67 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+    <actions></actions>
+    <description>Applies regulad/jobs's jobs/ with Job DSL, at the commit COMMIT names. regulad/jobs's seed workflow writes this job from its seed/config.xml, and builds it at each push to main. Items jobs/ no longer defines are deleted.</description>
+    <keepDependencies>false</keepDependencies>
+    <properties>
+        <hudson.model.ParametersDefinitionProperty>
+            <parameterDefinitions>
+                <hudson.model.StringParameterDefinition>
+                    <name>COMMIT</name>
+                    <defaultValue>main</defaultValue>
+                    <description>The commit of https://github.com/regulad/jobs to apply</description>
+                </hudson.model.StringParameterDefinition>
+            </parameterDefinitions>
+        </hudson.model.ParametersDefinitionProperty>
+        <jenkins.model.BuildDiscarderProperty>
+            <strategy class='hudson.tasks.LogRotator'>
+                <daysToKeep>-1</daysToKeep>
+                <numToKeep>50</numToKeep>
+                <artifactDaysToKeep>-1</artifactDaysToKeep>
+                <artifactNumToKeep>-1</artifactNumToKeep>
+                <removeLastBuild>false</removeLastBuild>
+            </strategy>
+        </jenkins.model.BuildDiscarderProperty>
+    </properties>
+    <canRoam>false</canRoam>
+    <disabled>false</disabled>
+    <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+    <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+    <triggers></triggers>
+    <concurrentBuild>false</concurrentBuild>
+    <builders>
+        <javaposse.jobdsl.plugin.ExecuteDslScripts plugin='job-dsl@3752.vb_199526b_20c3'>
+            <targets>jobs/**/*.groovy</targets>
+            <sandbox>false</sandbox>
+            <ignoreExisting>false</ignoreExisting>
+            <ignoreMissingFiles>false</ignoreMissingFiles>
+            <failOnMissingPlugin>true</failOnMissingPlugin>
+            <failOnSeedCollision>true</failOnSeedCollision>
+            <unstableOnDeprecation>true</unstableOnDeprecation>
+            <removedJobAction>DELETE</removedJobAction>
+            <removedViewAction>DELETE</removedViewAction>
+            <removedConfigFilesAction>IGNORE</removedConfigFilesAction>
+            <lookupStrategy>JENKINS_ROOT</lookupStrategy>
+        </javaposse.jobdsl.plugin.ExecuteDslScripts>
+    </builders>
+    <publishers></publishers>
+    <buildWrappers></buildWrappers>
+    <assignedNode>podman</assignedNode>
+    <scm class='hudson.plugins.git.GitSCM'>
+        <userRemoteConfigs>
+            <hudson.plugins.git.UserRemoteConfig>
+                <url>https://github.com/regulad/jobs.git</url>
+            </hudson.plugins.git.UserRemoteConfig>
+        </userRemoteConfigs>
+        <branches>
+            <hudson.plugins.git.BranchSpec>
+                <name>${COMMIT}</name>
+            </hudson.plugins.git.BranchSpec>
+        </branches>
+        <configVersion>2</configVersion>
+        <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+        <gitTool>Default</gitTool>
+    </scm>
+</project>
+
+

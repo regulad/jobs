@@ -1,0 +1,8 @@
+# The repository's own settings, which the Settings app applies at each push to
+# the default branch.
+repository:
+  name: jobs
+  description: Jenkins's jobs at ci.regulad.xyz, as Job DSL and Jenkinsfiles, applied by a GitHub Actions workflow
+  topics: jenkins, job-dsl, jenkins-pipeline, github-actions
+  private: false
+  default_branch: main

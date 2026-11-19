@@ -1,0 +1,179 @@
+// z4yx/pam_rssh: pam_rssh's packages, from the releases of
+// https://github.com/z4yx/pam_rssh, into Nexus at repo.regulad.xyz.
+//
+// A release's packages go to the release repositories, a pre-release's to the
+// testing ones. A pre-release is any release GitHub flags as one, or whose tag
+// has a SemVer pre-release part, such as v1.2.2-rc2, whatever GitHub's flag
+// says.
+// - Debian packages go to the APT repository of their target:
+//   pam-rssh-<target> or pam-rssh-<target>-testing.
+// - RPMs go to pam-rssh-rpm-hosted, at <channel>/<target>/<arch>/, such as
+//   stable/el9/x86_64 or testing/fc44/aarch64, under their own names, without
+//   the prefix upstream gives some assets.
+// Each run uploads what Nexus lacks, by SHA-256, so the first run also catches
+// up on the earlier releases. Where several releases of a channel build the
+// same file, as the pre-releases of one version do, the newest wins. An asset
+// this file has no place for makes the build unstable: a new target needs its
+// repository first.
+//
+// The repositories, their signing keys and svc-pam-rssh-ci, the Nexus user this
+// uploads as, are regulad/homelab's (ansible-generated's
+// group_vars/nexus_servers.yml).
+
+def uploads = []
+
+pipeline {
+  agent { label 'podman' }
+  options {
+    skipDefaultCheckout()
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '100'))
+    timeout(time: 30, unit: 'MINUTES')
+  }
+  parameters {
+    booleanParam(name: 'DRY_RUN', defaultValue: false,
+                 description: 'List what would be uploaded, without uploading anything')
+  }
+  environment {
+    NEXUS = 'https://repo.regulad.xyz'
+  }
+  stages {
+    stage('Plan') {
+      steps {
+        script {
+          def releases
+          withCredentials([usernamePassword(credentialsId: 'regulad-jenkins',
+                                            usernameVariable: 'GITHUB_APP', passwordVariable: 'GITHUB_TOKEN')]) {
+            releases = sh(returnStdout: true, script: '''
+              curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" -H 'Accept: application/vnd.github+json' \
+                'https://api.github.com/repos/z4yx/pam_rssh/releases?per_page=100'
+            ''')
+          }
+          def plan = planUploads(releases)
+          def present = [:]
+          withCredentials([usernamePassword(credentialsId: 'svc-pam-rssh-ci',
+                                            usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASSWORD')]) {
+            for (repository in plan.uploads.collect { it.repository }.unique()) {
+              present[repository] = nexusAssets(repository)
+            }
+          }
+          uploads = plan.uploads.findAll { !present[it.repository].contains(it.match) }
+          echo "${plan.uploads.size()} packages placed, ${uploads.size()} to upload:"
+          for (upload in uploads) {
+            echo "  ${upload.release} ${upload.name} -> ${upload.repository} ${upload.path}"
+          }
+          if (plan.unplaced) {
+            unstable("No repository takes these assets: ${plan.unplaced.join(', ')}")
+          }
+        }
+      }
+    }
+    stage('Upload') {
+      when { expression { !params.DRY_RUN && uploads } }
+      steps {
+        script {
+          withCredentials([usernamePassword(credentialsId: 'svc-pam-rssh-ci',
+                                            usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASSWORD')]) {
+            for (upload in uploads) {
+              withEnv(["ASSET_URL=${upload.url}", "ASSET_SHA256=${upload.sha256}", "FILE=${upload.file}",
+                       "REPOSITORY=${upload.repository}", "DIRECTORY=${upload.directory}"]) {
+                sh '''
+                  curl -fsSL -o "$FILE" "$ASSET_URL"
+                  echo "$ASSET_SHA256  $FILE" | sha256sum -c -
+                  if [ -n "$DIRECTORY" ]; then
+                    curl -fsS -u "$NEXUS_USER:$NEXUS_PASSWORD" -F "yum.directory=$DIRECTORY" \
+                      -F "yum.asset=@$FILE" -F "yum.asset.filename=$FILE" \
+                      "$NEXUS/service/rest/v1/components?repository=$REPOSITORY"
+                  else
+                    curl -fsS -u "$NEXUS_USER:$NEXUS_PASSWORD" -F "apt.asset=@$FILE" \
+                      "$NEXUS/service/rest/v1/components?repository=$REPOSITORY"
+                  fi
+                  rm -f "$FILE"
+                '''
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// Each asset Nexus has in the repository, as "<sha256>" and as "<path> <sha256>",
+// through as many pages as its assets API takes.
+def nexusAssets(String repository) {
+  def assets = [] as Set
+  def token = ''
+  while (true) {
+    def page
+    withEnv(["REPOSITORY=${repository}", "TOKEN=${token}"]) {
+      page = sh(returnStdout: true, script: '''
+        curl -fsS -u "$NEXUS_USER:$NEXUS_PASSWORD" -G --data-urlencode "repository=$REPOSITORY" \
+          ${TOKEN:+--data-urlencode "continuationToken=$TOKEN"} "$NEXUS/service/rest/v1/assets"
+      ''')
+    }
+    def parsed = parseAssets(page)
+    assets.addAll(parsed.assets)
+    token = parsed.token
+    if (!token) {
+      return assets
+    }
+  }
+}
+
+// JsonSlurper's maps can't outlive a step, so each parse returns plain values.
+@NonCPS
+def parseAssets(String json) {
+  def page = new groovy.json.JsonSlurper().parseText(json)
+  def assets = []
+  for (asset in page.items) {
+    String sha256 = asset.checksum?.sha256
+    if (sha256) {
+      assets << sha256
+      assets << ((asset.path as String) - ~/^\//) + ' ' + sha256
+    }
+  }
+  return [assets: assets, token: page.continuationToken as String]
+}
+
+// Every asset of every published release, placed in its repository; the newest
+// release wins each place. An APT repository is one target and channel, so an
+// upload there is matched by its digest alone; pam-rssh-rpm-hosted holds every
+// target and channel, so an upload there is matched by its path too.
+@NonCPS
+def planUploads(String json) {
+  def ubuntu = ['22.04': 'jammy', '24.04': 'noble', '26.04': 'resolute']
+  def placed = [:]
+  def unplaced = []
+  def releases = new groovy.json.JsonSlurper().parseText(json).findAll { !it.draft }.sort { it.published_at as String }
+  for (release in releases) {
+    String tag = release.tag_name
+    boolean testing = release.prerelease || tag ==~ /v?\d+\.\d+\.\d+-.+/
+    String channel = testing ? 'testing' : 'stable'
+    for (asset in release.assets) {
+      String name = asset.name
+      String digest = asset.digest
+      String sha256 = digest?.startsWith('sha256:') ? digest.substring(7) : null
+      def deb = name =~ /^(?:(?:debian-)?(bookworm|trixie)-(?:amd64|arm64)|ubuntu-(22\.04|24\.04|26\.04)(?:-arm)?)-(pam-rssh_[^\/]+\.deb)$/
+      def rpm = name =~ /^(?:(?:fedora|rockylinux)-)?(pam-rssh(?:-debuginfo|-debugsource)?-[^-\/]+-[^-\/]+\.(fc\d+|el\d+)\.(x86_64|aarch64)\.rpm)$/
+      def upload = null
+      if (sha256 && deb.matches()) {
+        String target = deb.group(1) ? 'debian-' + deb.group(1) : 'ubuntu-' + ubuntu[deb.group(2)]
+        String repository = 'pam-rssh-' + target + (testing ? '-testing' : '')
+        upload = [repository: repository, directory: '', file: deb.group(3), path: deb.group(3), match: sha256]
+      } else if (sha256 && rpm.matches()) {
+        String directory = channel + '/' + rpm.group(2) + '/' + rpm.group(3)
+        String path = directory + '/' + rpm.group(1)
+        upload = [repository: 'pam-rssh-rpm-hosted', directory: directory, file: rpm.group(1), path: path,
+                  match: path + ' ' + sha256]
+      }
+      if (upload == null) {
+        unplaced << "${tag}/${name}".toString()
+        continue
+      }
+      placed[upload.repository + ' ' + upload.path] = upload + [name: name, release: tag, sha256: sha256,
+                                                              url: asset.browser_download_url as String]
+    }
+  }
+  return [uploads: new ArrayList(placed.values()), unplaced: unplaced]
+}
