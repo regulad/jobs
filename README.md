@@ -18,6 +18,7 @@ alone.
 
 | Job | What it does |
 | --- | --- |
+| `mcMMO-Dev/mcMMO` | Builds [mcMMO](https://github.com/mcMMO-Dev/mcMMO) from the head of its `master` branch whenever it moves, keeping each build's `mcMMO.jar` as its artifact |
 | `z4yx/pam_rssh` | Uploads [pam_rssh](https://github.com/z4yx/pam_rssh)'s releases to Nexus's `pam-rssh-*` repositories at https://repo.regulad.xyz/; [its README](pipelines/z4yx/pam_rssh/README.md) says how to install from them |
 
 ## How a change reaches Jenkins
@@ -62,7 +63,9 @@ Configuration as Code
   permission the App itself lacks is first granted to the App on GitHub.
 - **Agents:** the `podman` label starts a container for each build, under
   rootless Podman beside the controller, from `jenkins/inbound-agent`, which
-  has `curl`, `git` and coreutils, but neither `jq` nor Python.
+  has `curl`, `git`, coreutils and a JDK 21, but neither `jq` nor Python.
+- **Maven:** the `maven` tool, a pinned Maven release, which Jenkins installs
+  on the agent of each build that names it (`tools { maven 'maven' }`).
 
 ## Writing a pipeline
 

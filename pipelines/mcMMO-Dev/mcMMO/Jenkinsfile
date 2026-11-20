@@ -1,0 +1,52 @@
+// mcMMO-Dev/mcMMO: mcMMO, built from the head of the master branch of
+// https://github.com/mcMMO-Dev/mcMMO, as upstream's own Jenkinsfile builds it,
+// and kept as the build's artifact, mcMMO.jar.
+//
+// mcMMO is GPL-3.0; upstream sells its builds on some platforms, so regulad's
+// servers run what this builds from source. Each build is of master's head as
+// it is, a -SNAPSHOT version or a release; its description gives the version
+// and commit.
+//
+// The tests run but for those upstream leaves out by default, which need Docker
+// (testcontainers) or are stress tests. The maven tool is regulad/homelab's,
+// in Jenkins's configuration as code.
+
+pipeline {
+  agent { label 'podman' }
+  tools {
+    maven 'maven'
+  }
+  options {
+    skipDefaultCheckout()
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+    timeout(time: 30, unit: 'MINUTES')
+  }
+  // Each hour, so a new head is built within one: polling asks GitHub for
+  // master's head, and builds only when it has moved. Jenkins learns this
+  // trigger from a run, so it starts after the job's first build.
+  triggers {
+    pollSCM('H * * * *')
+  }
+  stages {
+    stage('Build') {
+      steps {
+        script {
+          def commit = git(url: 'https://github.com/mcMMO-Dev/mcMMO.git', branch: 'master').GIT_COMMIT
+          sh 'mvn -B -V package'
+          def version = sh(returnStdout: true,
+                           script: "sed -n 's/^version=//p' target/maven-archiver/pom.properties").trim()
+          currentBuild.description = "${version} at ${commit.substring(0, 10)}"
+        }
+      }
+    }
+  }
+  post {
+    always {
+      junit(testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true)
+    }
+    success {
+      archiveArtifacts(artifacts: 'target/mcMMO.jar', fingerprint: true)
+    }
+  }
+}
