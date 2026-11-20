@@ -52,6 +52,14 @@ Configuration as Code
   repository defines the jobs inside, which name those credentials by ID, and
   never a folder: the seed would rewrite it without its credentials. A new
   folder starts there, before its jobs are added here.
+- **GitHub:** a folder whose jobs work on GitHub holds its own
+  `regulad-jenkins`, a credential of Jenkins's GitHub App. Bound as a username
+  and password, it gives the App's ID and a fresh installation token, which
+  lasts at most an hour, for only the repositories and permissions that
+  folder's credential names. `z4yx`'s reads `regulad/jobs` alone, which is
+  enough to read GitHub's public data at an installation's rate limit. A job
+  that needs more asks for it in homelab, in its folder's credential; a
+  permission the App itself lacks is first granted to the App on GitHub.
 - **Agents:** the `podman` label starts a container for each build, under
   rootless Podman beside the controller, from `jenkins/inbound-agent`, which
   has `curl`, `git` and coreutils, but neither `jq` nor Python.
