@@ -10,11 +10,11 @@
 // - RPMs go to pam-rssh-rpm-hosted, at <channel>/<target>/<arch>/, such as
 //   stable/el9/x86_64 or testing/fc44/aarch64, under their own names, without
 //   the prefix upstream gives some assets.
-// Each run uploads what Nexus lacks, by SHA-256, so the first run also catches
-// up on the earlier releases. Where several releases of a channel build the
-// same file, as the pre-releases of one version do, the newest wins. An asset
-// this file has no place for makes the build unstable: a new target needs its
-// repository first.
+// It runs each hour. Each run uploads what Nexus lacks, by SHA-256, so the
+// first run also caught up on the earlier releases. Where several releases of a
+// channel build the same file, as the pre-releases of one version do, the
+// newest wins. An asset this file has no place for makes the build unstable: a
+// new target needs its repository first.
 //
 // The repositories, their signing keys and svc-pam-rssh-ci, the Nexus user this
 // uploads as, are regulad/homelab's (ansible-generated's
@@ -33,6 +33,11 @@ pipeline {
   parameters {
     booleanParam(name: 'DRY_RUN', defaultValue: false,
                  description: 'List what would be uploaded, without uploading anything')
+  }
+  // Each hour, so a new release reaches Nexus within one; upstream sends no
+  // notice of its own.
+  triggers {
+    cron('H * * * *')
   }
   environment {
     NEXUS = 'https://repo.regulad.xyz'
