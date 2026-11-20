@@ -9,7 +9,7 @@ alone.
 
 | Path | What it holds |
 | --- | --- |
-| `jobs/<folder>.groovy` | [Job DSL](https://jenkinsci.github.io/job-dsl-plugin/) defining a folder's jobs; the folder itself is homelab's (below) |
+| `jobs/<folder>.groovy` | [Job DSL](https://jenkinsci.github.io/job-dsl-plugin/) defining a folder's jobs; the folder itself is homelab's (below). Job DSL makes a Groovy class of each script, so a character a class name can't hold, such as `-`, is written `_`: `mcMMO-Dev`'s jobs are in `jobs/mcMMO_Dev.groovy` |
 | `pipelines/<folder>/<job>/Jenkinsfile` | Each pipeline job's pipeline, which the job reads from `main` at every run |
 | `seed/config.xml` | The seed job, `jobs`, which applies `jobs/` |
 | `seed/apply.sh` | Writes the seed job into Jenkins, builds it at a commit, and waits for its result |
