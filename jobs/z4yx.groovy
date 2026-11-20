@@ -7,6 +7,11 @@
 // repository's main branch.
 pipelineJob('z4yx/pam_rssh') {
   description("pam_rssh's releases, from https://github.com/z4yx/pam_rssh, into Nexus's pam-rssh repositories.")
+  // As its Jenkinsfile declares it, so that even the job's first build can be a
+  // dry run: Jenkins learns a pipeline's own parameters only from a run.
+  parameters {
+    booleanParam('DRY_RUN', false, 'List what would be uploaded, without uploading anything')
+  }
   definition {
     cpsScm {
       scm {
