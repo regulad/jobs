@@ -2,8 +2,8 @@
 
 The jobs of Jenkins at https://ci.regulad.xyz/, other than the `regulad`
 organization folder, which builds each of regulad's repositories that has a
-`Jenkinsfile`. This repository has none of its own, so that folder leaves it
-alone.
+`Jenkinsfile`. This repository's own `Jenkinsfile` is the seed that applies the
+rest, so that folder builds it, as `regulad/jobs`.
 
 ## Layout
 
@@ -11,9 +11,7 @@ alone.
 | --- | --- |
 | `jobs/<folder>.groovy` | [Job DSL](https://jenkinsci.github.io/job-dsl-plugin/) defining a folder's jobs; the folder itself is homelab's (below). Job DSL makes a Groovy class of each script, so a character a class name can't hold, such as `-`, is written `_`: `mcMMO-Dev`'s jobs are in `jobs/mcMMO_Dev.groovy` |
 | `pipelines/<folder>/<job>/Jenkinsfile` | Each pipeline job's pipeline, which the job reads from `main` at every run |
-| `seed/config.xml` | The seed job, `jobs`, which applies `jobs/` |
-| `seed/apply.sh` | Writes the seed job into Jenkins, builds it at a commit, and waits for its result |
-| `.github/workflows/seed.yml` | Runs `seed/apply.sh` at each push to `main` |
+| `Jenkinsfile` | The seed, which applies `jobs/` in `main`'s build, `regulad/jobs/main` |
 | `.github/settings.yml` | This repository's name, description and topics, which the Settings app applies |
 
 | Job | What it does |
@@ -23,30 +21,20 @@ alone.
 
 ## How a change reaches Jenkins
 
-At each push to `main`, the `seed` workflow signs in to Jenkins as `svc-jobs`
-and:
-
-1. writes the seed job, `jobs`, from `seed/config.xml`, creating it where
-   Jenkins lacks it;
-2. builds it at the pushed commit, which runs Job DSL over `jobs/**/*.groovy`,
-   creating and updating what they define and deleting the items they no longer
-   define;
-3. prints the seed's log, and fails if the seed does.
+At each push, GitHub tells Jenkins through its App's webhook, and the `regulad`
+organization folder builds the pushed branch or pull request of `regulad/jobs`.
+On `main`, the seed runs Job DSL over `jobs/**/*.groovy` at the pushed commit,
+creating and updating what they define and deleting the items they no longer
+define; Jenkins reports the result on the commit. Other branches and pull
+requests apply nothing.
 
 A pipeline's change needs no seeding: its job reads its `Jenkinsfile` from `main`
-at each run. The workflow can also be run by hand, from the Actions tab.
-
-`seed/config.xml` is the XML Job DSL itself generates for the seed job, so that
-it matches the plugins Jenkins runs. To change the seed, write the change as Job
-DSL, run it through Job DSL without applying it, and take the XML.
+at each run. The seed can also be built by hand, as `regulad/jobs/main`.
 
 Jenkins itself is [regulad/homelab](https://github.com/regulad/homelab)'s, under
 Configuration as Code
 (`ansible-generated/files/jenkins.regulad.internal/etc/jenkins/casc.d/`):
 
-- **svc-jobs:** a FreeIPA user, as every Jenkins user is, and so an
-  administrator. homelab keeps its password in SOPS, and its `tofu/github`
-  sets this repository's `JENKINS_USER` and `JENKINS_PASSWORD` secrets from it.
 - **Script approval:** Job DSL runs without it, as only regulad writes here.
 - **Folders and credentials:** each folder these jobs live in, such as `z4yx`,
   is defined there with the credentials only its items can use, from SOPS. This

@@ -2,7 +2,7 @@
 # the default branch.
 repository:
   name: jobs
-  description: Jenkins's jobs at ci.regulad.xyz, as Job DSL and Jenkinsfiles, applied by a GitHub Actions workflow
-  topics: jenkins, job-dsl, jenkins-pipeline, github-actions
+  description: Jenkins's jobs at ci.regulad.xyz, as Job DSL and Jenkinsfiles, applied by a seed that Jenkins builds from here
+  topics: jenkins, job-dsl, jenkins-pipeline
   private: false
   default_branch: main
