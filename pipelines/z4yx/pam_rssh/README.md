@@ -78,8 +78,8 @@ workaround with a `FIXME`, linking
 
 One repository, `pam-rssh-rpm`, laid out as `<channel>/<target>/<arch>/`. The
 channel is `stable` or `testing`; the target is `el9` or `el10` for Enterprise
-Linux, and `fc42`, `fc43` or `fc44` for Fedora; the arch is `x86_64` or
-`aarch64`. Each directory is a repository of its own, with its own metadata.
+Linux, and `fc42`, `fc43`, `fc44` or `fc45` for Fedora; the arch is `x86_64`
+or `aarch64`. Each directory is a repository of its own, with its own metadata.
 
 Nexus signs the metadata, not the RPMs, and upstream leaves those unsigned too.
 So `dnf` checks the signed metadata (`repo_gpgcheck=1`) and each RPM's checksum
@@ -99,8 +99,8 @@ gpgkey=https://repo.regulad.xyz/repository/keys/pam-rssh-rpm.asc
 Then `sudo dnf install pam-rssh`. For Fedora, write `fc$releasever` in place of
 `el$releasever`. For the testing channel, write `testing` in place of `stable`.
 Where `$releasever` is not the release's bare major version, write the target out,
-as in `el9`. The testing channel also holds rc1's `pam-rssh-debuginfo` and
-`pam-rssh-debugsource` RPMs for Fedora.
+as in `el9`. The testing channel also holds v1.2.2-rc1's `pam-rssh-debuginfo`
+and `pam-rssh-debugsource` RPMs for Fedora.
 
 ## Keys
 
