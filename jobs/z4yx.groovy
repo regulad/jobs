@@ -12,6 +12,18 @@ pipelineJob('z4yx/pam_rssh') {
   parameters {
     booleanParam('DRY_RUN', false, 'List what would be uploaded, without uploading anything')
   }
+  // Its trigger too, as its Jenkinsfile declares it. Each seed run writes the
+  // job anew, without what its runs added, so a trigger only the Jenkinsfile
+  // declares would be gone after the seed, with no run left to bring it back.
+  properties {
+    pipelineTriggers {
+      triggers {
+        cron {
+          spec('H * * * *')
+        }
+      }
+    }
+  }
   definition {
     cpsScm {
       scm {

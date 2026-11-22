@@ -23,8 +23,8 @@ pipeline {
     timeout(time: 30, unit: 'MINUTES')
   }
   // Each hour, so a new head is built within one: polling asks GitHub for
-  // master's head, and builds only when it has moved. Jenkins learns this
-  // trigger from a run, so it starts after the job's first build.
+  // master's head, and builds only when it has moved. jobs/mcMMO_Dev.groovy
+  // declares it too, so that the seed keeps it: change both together.
   triggers {
     pollSCM('H * * * *')
   }

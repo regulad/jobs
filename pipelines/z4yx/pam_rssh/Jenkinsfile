@@ -35,7 +35,8 @@ pipeline {
                  description: 'List what would be uploaded, without uploading anything')
   }
   // Each hour, so a new release reaches Nexus within one; upstream sends no
-  // notice of its own.
+  // notice of its own. jobs/z4yx.groovy declares it too, so that the seed keeps
+  // it: change both together.
   triggers {
     cron('H * * * *')
   }

@@ -5,6 +5,18 @@
 // from this repository's main branch.
 pipelineJob('mcMMO-Dev/mcMMO') {
   description("mcMMO, built from the head of https://github.com/mcMMO-Dev/mcMMO's master branch, with each build's mcMMO.jar kept as its artifact.")
+  // Its trigger, as its Jenkinsfile declares it. Each seed run writes the job
+  // anew, without what its runs added, so a trigger only the Jenkinsfile
+  // declares would be gone after the seed, with no run left to bring it back.
+  properties {
+    pipelineTriggers {
+      triggers {
+        pollSCM {
+          scmpoll_spec('H * * * *')
+        }
+      }
+    }
+  }
   definition {
     cpsScm {
       scm {
