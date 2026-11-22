@@ -1,8 +1,14 @@
-# The repository's own settings, which the Settings app applies at each push to
-# the default branch.
+# Repository configuration, managed by the Settings app
+# (https://github.com/repository-settings/app). The shared defaults come from
+# regulad/.github; this file sets only what is this repository's own.
+_extends: .github
+
 repository:
   name: jobs
-  description: Jenkins's jobs at ci.regulad.xyz, as Job DSL and Jenkinsfiles, applied by a seed that Jenkins builds from here
-  topics: jenkins, job-dsl, jenkins-pipeline
+  description: >-
+    Jenkins's jobs at ci.regulad.xyz, as Job DSL and Jenkinsfiles, applied by a seed that Jenkins builds from here
+  homepage: ""
   private: false
+  # Topics: comma-and-space separated string, NOT a YAML list.
+  topics: jenkins, job-dsl, jenkins-pipeline
   default_branch: main
