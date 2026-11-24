@@ -1,9 +1,10 @@
-// z4yx: jobs for z4yx's projects. The z4yx folder itself, with the credentials
-// only its jobs can use, is regulad/homelab's: a folder defined here would be
-// rewritten by the seed without them.
+// z4yx: the folder of jobs for z4yx's projects, and its jobs.
+folder('z4yx') {
+  description("Packages of z4yx's projects, which Nexus at repo.regulad.xyz serves.")
+}
 
 // pam_rssh's releases into Nexus's pam-rssh repositories, as svc-pam-rssh-ci, a
-// credential of the z4yx folder. Each run reads its pipeline from this
+// credential in Jenkins's own store. Each run reads its pipeline from this
 // repository's main branch.
 pipelineJob('z4yx/pam_rssh') {
   description("pam_rssh's releases, from https://github.com/z4yx/pam_rssh, into Nexus's pam-rssh repositories.")

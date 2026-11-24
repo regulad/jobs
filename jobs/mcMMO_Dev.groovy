@@ -1,5 +1,7 @@
-// mcMMO-Dev: jobs for mcMMO-Dev's projects. The mcMMO-Dev folder itself is
-// regulad/homelab's, as every folder of these jobs is.
+// mcMMO-Dev: the folder of jobs for mcMMO-Dev's projects, and its jobs.
+folder('mcMMO-Dev') {
+  description("Builds of mcMMO-Dev's projects, kept as each build's artifacts.")
+}
 
 // mcMMO, built from the head of its master branch. Each run reads its pipeline
 // from this repository's main branch.
