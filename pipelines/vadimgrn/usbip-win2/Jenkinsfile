@@ -20,7 +20,12 @@
 // whose pull request was closed, as a moderator might, is not submitted again:
 // that one is submitted by hand, if at all.
 //
-// winget-token, regubot's classic token with public_repo, is regulad/homelab's,
+// Once it has submitted, it subscribes regulad to the pull request, so that
+// GitHub notifies him of it, by email too where his settings say so.
+//
+// winget-token, regubot's classic token with public_repo, and
+// regulad-notifications-token, regulad's classic token with the notifications
+// scope alone, which GitHub's updateSubscription needs, are regulad/homelab's,
 // in Jenkins's configuration as code, and every job's.
 
 def version = null
@@ -90,6 +95,21 @@ pipeline {
     stage('Submit') {
       when { expression { !existing } }
       steps {
+        script {
+          // regulad's token is checked before Komac submits anything, so that a
+          // build without it, or with one that has lapsed, submits nothing.
+          if (!params.DRY_RUN) {
+            withCredentials([string(credentialsId: 'regulad-notifications-token', variable: 'REGULAD_TOKEN')]) {
+              def response = sh(returnStdout: true, script: '''
+                printf '{"query":"{ viewer { login } }"}' |
+                  curl -fsS -H "Authorization: Bearer $REGULAD_TOKEN" --data @- https://api.github.com/graphql
+              ''')
+              if (graphQl(response, ['viewer', 'login']) != 'regulad') {
+                error("regulad-notifications-token isn't regulad's: ${response}")
+              }
+            }
+          }
+        }
         withCredentials([string(credentialsId: 'winget-token', variable: 'GITHUB_TOKEN')]) {
           withEnv(["VERSION=${version}", "X64_URL=${urls[0]}", "ARM64_URL=${urls[1]}"]) {
             // Komac's Linux builds, by the SHA-256 of each, from its release's
@@ -118,7 +138,67 @@ pipeline {
         }
       }
     }
+    // regulad, subscribed to the pull request regubot has just opened, so that
+    // GitHub notifies him of it as of a thread he watches. It finds the pull
+    // request among regubot's open ones, which GitHub lists at once, where its
+    // search can take a while to index a new one.
+    stage('Subscribe regulad') {
+      when { expression { !existing && !params.DRY_RUN } }
+      steps {
+        script {
+          def pullRequest
+          withCredentials([string(credentialsId: 'winget-token', variable: 'GITHUB_TOKEN')]) {
+            pullRequest = openPullRequest(sh(returnStdout: true, script: '''
+              printf '{"query":"{ viewer { pullRequests(first: 20, states: OPEN, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { id url title repository { nameWithOwner } } } } }"}' |
+                curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" --data @- https://api.github.com/graphql
+            '''), env.PACKAGE, version)
+          }
+          if (!pullRequest) {
+            error("regubot has no open pull request for ${env.PACKAGE} ${version}")
+          }
+          withCredentials([string(credentialsId: 'regulad-notifications-token', variable: 'REGULAD_TOKEN')]) {
+            withEnv(["PULL_REQUEST_ID=${pullRequest.id}"]) {
+              def response = sh(returnStdout: true, script: '''
+                printf '{"query":"mutation($id: ID!) { updateSubscription(input: {subscribableId: $id, state: SUBSCRIBED}) { subscribable { viewerSubscription } } }","variables":{"id":"%s"}}' "$PULL_REQUEST_ID" |
+                  curl -fsS -H "Authorization: Bearer $REGULAD_TOKEN" --data @- https://api.github.com/graphql
+              ''')
+              if (graphQl(response, ['updateSubscription', 'subscribable', 'viewerSubscription']) != 'SUBSCRIBED') {
+                error("Subscribing regulad to ${pullRequest.url} failed: ${response}")
+              }
+            }
+          }
+          echo "regulad is subscribed to ${pullRequest.url}"
+          currentBuild.description = "${version}: ${pullRequest.url}"
+        }
+      }
+    }
   }
+}
+
+// A value from a GraphQL response's data, by its path; null if the response
+// has no such value, as when it has errors instead.
+@NonCPS
+def graphQl(String json, List path) {
+  def value = new groovy.json.JsonSlurper().parseText(json).data
+  for (key in path) {
+    value = value instanceof Map ? value[key] : null
+  }
+  return value as String
+}
+
+// The open pull request of regubot's on microsoft/winget-pkgs whose title
+// holds the identifier and the version as words, as [id, url]; or null.
+@NonCPS
+def openPullRequest(String json, String identifier, String version) {
+  def nodes = new groovy.json.JsonSlurper().parseText(json).data?.viewer?.pullRequests?.nodes ?: []
+  for (node in nodes) {
+    def words = (node.title as String).tokenize()
+    if ((node.repository?.nameWithOwner as String) == 'microsoft/winget-pkgs' &&
+        words.contains(identifier) && words.contains(version)) {
+      return [id: node.id as String, url: node.url as String]
+    }
+  }
+  return null
 }
 
 // The latest release's version, from its tag, and the URLs of its x64 and
