@@ -19,6 +19,7 @@ rest, so that folder builds it, as `regulad/jobs`.
 | Job | What it does |
 | --- | --- |
 | `mcMMO-Dev/mcMMO` | Builds [mcMMO](https://github.com/mcMMO-Dev/mcMMO) from the head of its `master` branch whenever it moves, keeping each build's `mcMMO.jar` as its artifact |
+| `vadimgrn/usbip-win2` | Submits [usbip-win2](https://github.com/vadimgrn/usbip-win2)'s latest release to winget as `vadimgrn.usbip-win2`, with [Komac](https://github.com/russellbanks/Komac), as [regubot](https://github.com/regubot), regulad's machine account |
 | `z4yx/pam_rssh` | Uploads [pam_rssh](https://github.com/z4yx/pam_rssh)'s releases to Nexus's `pam-rssh-*` repositories at https://repo.regulad.xyz/; [its README](pipelines/z4yx/pam_rssh/README.md) says how to install from them |
 
 ## How a change reaches Jenkins

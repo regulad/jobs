@@ -1,0 +1,163 @@
+// vadimgrn/usbip-win2: usbip-win2's releases, from
+// https://github.com/vadimgrn/usbip-win2, submitted to winget as
+// vadimgrn.usbip-win2 by regubot, regulad's machine account, with Komac.
+//
+// Upstream doesn't submit its releases to winget itself. Each hour this reads
+// upstream's latest release, which GitHub picks from those that are neither
+// drafts nor pre-releases. Its version is its tag's (v.0.9.8.1's is 0.9.8.1),
+// and its installers are USBip-<version>-x64.exe and USBip-<version>-arm64.exe;
+// a release without both fails the build.
+//
+// Komac (https://github.com/russellbanks/Komac) writes the version's manifests
+// from winget's latest ones and the installers, and opens the pull request on
+// microsoft/winget-pkgs from regubot's fork, regubot/winget-pkgs. It commits
+// there through GitHub's API, which signs the commits.
+//
+// A version is submitted once. Komac submits nothing when microsoft/winget-pkgs
+// has a pull request in any state, open, merged or closed, whose title holds
+// the package's identifier and the version as words. This asks GitHub the same
+// first, so that a run with nothing to submit doesn't download Komac. A version
+// whose pull request was closed, as a moderator might, is not submitted again:
+// that one is submitted by hand, if at all.
+//
+// winget-token, regubot's classic token with public_repo, is regulad/homelab's,
+// in Jenkins's configuration as code, and every job's.
+
+def version = null
+def urls = []
+def existing = null
+
+pipeline {
+  agent { label 'podman' }
+  options {
+    skipDefaultCheckout()
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '100'))
+    timeout(time: 30, unit: 'MINUTES')
+  }
+  parameters {
+    booleanParam(name: 'DRY_RUN', defaultValue: false,
+                 description: 'Print the manifests that would be submitted, without submitting them')
+  }
+  // Each hour, so a new release reaches winget's queue within one; upstream
+  // sends no notice of its own. jobs/vadimgrn.groovy declares it too, so that
+  // the seed keeps it: change both together.
+  triggers {
+    cron('H * * * *')
+  }
+  environment {
+    PACKAGE = 'vadimgrn.usbip-win2'
+    UPSTREAM = 'vadimgrn/usbip-win2'
+    // Komac never prompts under CI: where a pull request exists, it submits
+    // nothing and succeeds.
+    CI = 'true'
+    KOMAC_VERSION = '2.17.2'
+  }
+  stages {
+    stage('Plan') {
+      steps {
+        script {
+          withCredentials([string(credentialsId: 'winget-token', variable: 'GITHUB_TOKEN')]) {
+            def release = parseRelease(sh(returnStdout: true, script: '''
+              curl -fsS -H "Authorization: Bearer $GITHUB_TOKEN" -H 'Accept: application/vnd.github+json' \
+                "https://api.github.com/repos/$UPSTREAM/releases/latest"
+            '''))
+            if (release.problem) {
+              error(release.problem)
+            }
+            version = release.version
+            urls = release.urls
+            withEnv(["VERSION=${version}"]) {
+              existing = existingPullRequest(sh(returnStdout: true, script: '''
+                curl -fsS -G -H "Authorization: Bearer $GITHUB_TOKEN" -H 'Accept: application/vnd.github+json' \
+                  --data-urlencode "q=repo:microsoft/winget-pkgs is:pr in:title $PACKAGE $VERSION" \
+                  --data-urlencode 'per_page=100' 'https://api.github.com/search/issues'
+              '''), env.PACKAGE, version)
+            }
+          }
+          if (existing) {
+            echo "${env.PACKAGE} ${version} has its pull request: ${existing}"
+            currentBuild.description = "${version}: ${existing}"
+          } else {
+            echo "${env.PACKAGE} ${version} has no pull request; its installers:"
+            for (url in urls) {
+              echo "  ${url}"
+            }
+          }
+        }
+      }
+    }
+    stage('Submit') {
+      when { expression { !existing } }
+      steps {
+        withCredentials([string(credentialsId: 'winget-token', variable: 'GITHUB_TOKEN')]) {
+          withEnv(["VERSION=${version}", "X64_URL=${urls[0]}", "ARM64_URL=${urls[1]}"]) {
+            // Komac's Linux builds, by the SHA-256 of each, from its release's
+            // SHA256SUMS, which GitHub's digests of the assets match (checked
+            // 2026-11-24). Its releases aren't immutable, so the digests pin
+            // them; a new Komac is a change here.
+            sh '''
+              case "$(uname -m)" in
+                x86_64) target=x86_64-unknown-linux-gnu
+                  sha256=b03b020eec98acfb0b53e284a6e21815b884be33de6785b97e7a120f0e748966 ;;
+                aarch64) target=aarch64-unknown-linux-gnu
+                  sha256=f880bff72f9f634ba72e478fb2f1f0f6bc08f22d5b7c073d636314a23bc1d2de ;;
+                *) echo "Komac has no Linux build for $(uname -m)" >&2; exit 1 ;;
+              esac
+              curl -fsSL -o komac.tar.gz \
+                "https://github.com/russellbanks/Komac/releases/download/v$KOMAC_VERSION/komac-$KOMAC_VERSION-$target.tar.gz"
+              echo "$sha256  komac.tar.gz" | sha256sum -c -
+              tar -xzf komac.tar.gz komac
+              if [ "$DRY_RUN" = true ]; then mode=--dry-run; else mode=--submit; fi
+              ./komac update "$PACKAGE" --version "$VERSION" --urls "$X64_URL" "$ARM64_URL" "$mode"
+            '''
+          }
+        }
+        script {
+          currentBuild.description = "${version}: ${params.DRY_RUN ? 'dry run' : 'submitted'}"
+        }
+      }
+    }
+  }
+}
+
+// The latest release's version, from its tag, and the URLs of its x64 and
+// arm64 installers, in that order; or the problem that keeps it from being
+// submitted. JsonSlurper's maps can't outlive a step, so this returns plain
+// values.
+@NonCPS
+def parseRelease(String json) {
+  def release = new groovy.json.JsonSlurper().parseText(json)
+  String tag = release.tag_name
+  def tagged = tag =~ /^v\.?(\d+(?:\.\d+)+)$/
+  if (!tagged.matches()) {
+    return [problem: "No version in upstream's tag ${tag}".toString()]
+  }
+  String version = tagged.group(1)
+  def urls = []
+  for (arch in ['x64', 'arm64']) {
+    String name = "USBip-${version}-${arch}.exe"
+    def asset = release.assets.find { (it.name as String) == name }
+    if (asset == null) {
+      return [problem: "Upstream's ${tag} has no ${name}".toString()]
+    }
+    urls << (asset.browser_download_url as String)
+  }
+  return [version: version, urls: urls]
+}
+
+// The first pull request whose title holds the identifier and the version as
+// words, between whitespace or the title's ends, as Komac's own check matches
+// them (src/github/graphql/get_existing_pull_request.rs), with its state; or
+// null.
+@NonCPS
+def existingPullRequest(String json, String identifier, String version) {
+  for (item in new groovy.json.JsonSlurper().parseText(json).items) {
+    def words = (item.title as String).tokenize()
+    if (words.contains(identifier) && words.contains(version)) {
+      String state = item.pull_request?.merged_at ? 'merged' : item.state
+      return "${item.html_url} (${state})".toString()
+    }
+  }
+  return null
+}
